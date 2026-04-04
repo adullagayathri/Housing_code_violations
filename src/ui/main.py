@@ -1,6 +1,7 @@
 import os
 import sys
 from pathlib import Path
+from io import BytesIO
 
 import pandas as pd
 import streamlit as st
@@ -11,9 +12,7 @@ ROOT_DIR = Path(__file__).resolve().parents[2]
 sys.path.append(str(ROOT_DIR))
 
 from src.config import (
-    CSV_PATH,
     DATA_JSON_DIR,
-    IMAGE_DIR,
     CANVAS_FILL_COLOR,
     CANVAS_STROKE_WIDTH,
     VIOLATION_COLORS,
@@ -37,6 +36,9 @@ if "saved_annotations" not in st.session_state:
 
 if "last_image" not in st.session_state:
     st.session_state.last_image = None
+
+if "uploaded_images" not in st.session_state:
+    st.session_state.uploaded_images = {}
 
 # ---------------- styling ----------------
 st.markdown(
@@ -95,7 +97,7 @@ st.markdown(
 
 st.markdown('<div class="main-title">🏠 House Issue Marking Tool</div>', unsafe_allow_html=True)
 st.markdown(
-    '<div class="sub-title">Choose a house image, select a violation, draw a box, add it, and save all violations together.</div>',
+    '<div class="sub-title">Upload house images, choose a violation, draw a box, add it, and save all violations together.</div>',
     unsafe_allow_html=True,
 )
 
@@ -103,45 +105,19 @@ st.markdown(
     """
     <div class="help-box">
     <b>How to use:</b><br>
-    1. Choose a house image<br>
-    2. Choose a violation<br>
-    3. Draw one box around that issue<br>
-    4. Click <b>Add Violation</b><br>
-    5. Repeat for other issues<br>
-    6. Click <b>Save JSON</b> once at the end
+    1. Upload one or more house images<br>
+    2. Choose an uploaded image<br>
+    3. Choose a violation<br>
+    4. Draw one box around that issue<br>
+    5. Click <b>Add Violation</b><br>
+    6. Repeat for other issues<br>
+    7. Click <b>Save JSON</b> once at the end
     </div>
     """,
     unsafe_allow_html=True,
 )
 
-# ---------------- checks ----------------
-if not os.path.exists(CSV_PATH):
-    st.error(f"CSV file not found: {CSV_PATH}")
-    st.stop()
-
-if not os.path.exists(IMAGE_DIR):
-    st.error(f"Image folder not found: {IMAGE_DIR}")
-    st.stop()
-
-# ---------------- load csv ----------------
-try:
-    df = pd.read_csv(CSV_PATH)
-except Exception as e:
-    st.error(f"Could not read CSV: {e}")
-    st.stop()
-
-required_cols = [
-    "Violation_Description",
-    "CodeViolationDescription"
-]
-
-missing_cols = [c for c in required_cols if c not in df.columns]
-if missing_cols:
-    # fallback if the CSV has different column names
-    pass
-
-# If your CSV already has a violation column with clean names, use that.
-# Otherwise replace this with a hardcoded list.
+# ---------------- violations list ----------------
 violation_descriptions = [
     "Peeling Paint",
     "Vehicles on Unpaved",
@@ -158,19 +134,29 @@ violation_descriptions = [
     "Abandoned / Unsafe",
 ]
 
-# ---------------- load images ----------------
-valid_ext = (".jpg", ".jpeg", ".png")
-image_files = sorted([f for f in os.listdir(IMAGE_DIR) if f.lower().endswith(valid_ext)])
+# ---------------- upload images ----------------
+uploaded_files = st.file_uploader(
+    "Upload house images",
+    type=["jpg", "jpeg", "png"],
+    accept_multiple_files=True,
+)
 
-if not image_files:
-    st.warning("No images found in the image folder.")
+if uploaded_files:
+    for uploaded_file in uploaded_files:
+        image_bytes = uploaded_file.read()
+        st.session_state.uploaded_images[uploaded_file.name] = image_bytes
+
+image_names = list(st.session_state.uploaded_images.keys())
+
+if not image_names:
+    st.info("Please upload at least one image to begin.")
     st.stop()
 
 # ---------------- sidebar ----------------
 with st.sidebar:
     st.header("Controls")
 
-    selected_image_name = st.selectbox("Choose a house image", image_files)
+    selected_image_name = st.selectbox("Choose an uploaded image", image_names)
 
     selected_violation = st.selectbox("Choose a violation", violation_descriptions)
     selected_color = VIOLATION_COLORS.get(selected_violation, DEFAULT_BOX_COLOR)
@@ -199,11 +185,10 @@ with st.sidebar:
         )
 
 # ---------------- image handling ----------------
-selected_image_path = os.path.join(IMAGE_DIR, selected_image_name)
-image = Image.open(selected_image_path)
+image_bytes = st.session_state.uploaded_images[selected_image_name]
+image = Image.open(BytesIO(image_bytes)).convert("RGB")
 img_width, img_height = image.size
 
-# load saved annotations only when image changes
 if st.session_state.last_image != selected_image_name:
     st.session_state.saved_annotations = load_annotations_if_exists(
         selected_image_name,
