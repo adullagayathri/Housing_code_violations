@@ -1,0 +1,20 @@
+{
+    "image_id": "10-CarltonStreetFS.jpg",
+    "annotations": [
+        {
+            "category": "A",
+            "violation": "Exterior lighting - Inadequate or non-functional lighting fixtures on building exterior, including walkways, entrances, exits, and outdoor spaces required by fire code",
+            "code": "Part 1242.4",
+            "code_source": "Physical Standards, State Uniform Fire Prevention and Building Code",
+            "bbox": [
+                36,
+                496,
+                482,
+                67
+            ],
+            "fine_min": "$10.50",
+            "fine_max": "$31.50",
+            "color": "#EF4444"
+        }
+    ]
+}

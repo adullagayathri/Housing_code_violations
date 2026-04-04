@@ -1,0 +1,33 @@
+{
+    "image_id": "301Genesee2013.jpg",
+    "annotations": [
+        {
+            "category": "A",
+            "violation": "Exterior protection - Deteriorated, damaged, or missing exterior protective elements including weather-resistant barriers, flashing, or protective coatings on building envelope",
+            "code": "Part 1242.5",
+            "code_source": "Physical Standards, State Uniform Fire Prevention and Building Code",
+            "bbox": [
+                296,
+                375,
+                200,
+                144
+            ],
+            "fine_min": "$10.50",
+            "fine_max": "$31.50"
+        },
+        {
+            "category": "A",
+            "violation": "Exterior protection - Deteriorated, damaged, or missing exterior protective elements including weather-resistant barriers, flashing, or protective coatings on building envelope",
+            "code": "Part 1242.5",
+            "code_source": "Physical Standards, State Uniform Fire Prevention and Building Code",
+            "bbox": [
+                458,
+                110,
+                59,
+                76
+            ],
+            "fine_min": "$10.50",
+            "fine_max": "$31.50"
+        }
+    ]
+}
