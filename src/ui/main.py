@@ -7,6 +7,7 @@ import pandas as pd
 import streamlit as st
 from PIL import Image
 from streamlit_drawable_canvas import st_canvas
+from io import BytesIO
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 sys.path.append(str(ROOT_DIR))
@@ -135,22 +136,63 @@ violation_descriptions = [
 ]
 
 # ---------------- upload images ----------------
-uploaded_files = st.file_uploader(
-    "Upload house images",
-    type=["jpg", "jpeg", "png"],
-    accept_multiple_files=True,
+# ---------------- image source options ----------------
+st.markdown("### Add Images")
+
+image_source = st.radio(
+    "Choose how to add images",
+    ["Upload Images", "Load From Folder"],
+    horizontal=True,
 )
 
-if uploaded_files:
-    for uploaded_file in uploaded_files:
-        image_bytes = uploaded_file.read()
-        st.session_state.uploaded_images[uploaded_file.name] = image_bytes
+# Option 1: Upload images
+if image_source == "Upload Images":
+    uploaded_files = st.file_uploader(
+        "Upload house images",
+        type=["jpg", "jpeg", "png"],
+        accept_multiple_files=True,
+    )
+
+    if uploaded_files:
+        for uploaded_file in uploaded_files:
+            image_bytes = uploaded_file.read()
+            st.session_state.uploaded_images[uploaded_file.name] = image_bytes
+
+# Option 2: Load images from local folder
+elif image_source == "Load From Folder":
+    folder_path = st.text_input("Enter local folder path")
+
+    if folder_path:
+        valid_ext = (".jpg", ".jpeg", ".png")
+        if os.path.exists(folder_path) and os.path.isdir(folder_path):
+            folder_files = sorted(
+                [f for f in os.listdir(folder_path) if f.lower().endswith(valid_ext)]
+            )
+
+            if folder_files:
+                for file_name in folder_files:
+                    full_path = os.path.join(folder_path, file_name)
+                    with open(full_path, "rb") as f:
+                        st.session_state.uploaded_images[file_name] = f.read()
+                st.success(f"Loaded {len(folder_files)} images from folder")
+            else:
+                st.warning("No image files found in that folder.")
+        else:
+            st.error("Folder path is not valid.")
 
 image_names = list(st.session_state.uploaded_images.keys())
 
 if not image_names:
-    st.info("Please upload at least one image to begin.")
+    st.info("Please upload images or load a folder to begin.")
     st.stop()
+
+st.markdown("### Add Images")
+
+if st.button("Clear Loaded Images"):
+    st.session_state.uploaded_images = {}
+    st.session_state.saved_annotations = []
+    st.session_state.last_image = None
+    st.rerun()
 
 # ---------------- sidebar ----------------
 with st.sidebar:
