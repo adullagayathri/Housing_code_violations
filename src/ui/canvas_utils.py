@@ -33,6 +33,7 @@ def load_annotations_if_exists(image_name, json_dir):
 def annotation_to_fabric_object(annotation):
     x, y, w, h = annotation["bbox"]
     color = annotation.get("color", "#000000")
+    violation = annotation.get("violation", "")
 
     return {
         "type": "rect",
@@ -45,8 +46,9 @@ def annotation_to_fabric_object(annotation):
         "strokeWidth": 4,
         "rx": 8,
         "ry": 8,
+        "violation": violation,
+        "color": color,
     }
-
 
 def build_initial_drawing(annotations):
     return {
