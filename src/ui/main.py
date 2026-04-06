@@ -229,6 +229,14 @@ with st.sidebar:
 # ---------------- image handling ----------------
 image_bytes = st.session_state.uploaded_images[selected_image_name]
 image = Image.open(BytesIO(image_bytes)).convert("RGB")
+max_width = 900
+orig_width, orig_height = image.size
+
+if orig_width > max_width:
+    new_width = max_width
+    new_height = int(orig_height * (new_width / orig_width))
+    image = image.resize((new_width, new_height))
+
 img_width, img_height = image.size
 
 if st.session_state.last_image != selected_image_name:
@@ -243,6 +251,8 @@ initial_drawing = build_initial_drawing(st.session_state.saved_annotations)
 left, right = st.columns([4, 2], gap="large")
 
 with left:
+    st.markdown("### Image Preview")
+    st.image(image, use_container_width=True)
     st.markdown("### Mark Issues on the Image")
 
     canvas_result = st_canvas(
