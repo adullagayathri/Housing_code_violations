@@ -7,7 +7,6 @@ import pandas as pd
 import streamlit as st
 from PIL import Image
 from streamlit_drawable_canvas import st_canvas
-from io import BytesIO
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 sys.path.append(str(ROOT_DIR))
@@ -107,7 +106,7 @@ st.markdown(
     <div class="help-box">
     <b>How to use:</b><br>
     1. Upload one or more house images<br>
-    2. Choose an uploaded image<br>
+    2. Choose an image<br>
     3. Choose a violation<br>
     4. Draw one box around that issue<br>
     5. Click <b>Add Violation</b><br>
@@ -135,7 +134,6 @@ violation_descriptions = [
     "Abandoned / Unsafe",
 ]
 
-# ---------------- upload images ----------------
 # ---------------- image source options ----------------
 st.markdown("### Add Images")
 
@@ -180,25 +178,23 @@ elif image_source == "Load From Folder":
         else:
             st.error("Folder path is not valid.")
 
-image_names = list(st.session_state.uploaded_images.keys())
-
-if not image_names:
-    st.info("Please upload images or load a folder to begin.")
-    st.stop()
-
-st.markdown("### Add Images")
-
 if st.button("Clear Loaded Images"):
     st.session_state.uploaded_images = {}
     st.session_state.saved_annotations = []
     st.session_state.last_image = None
     st.rerun()
 
+image_names = list(st.session_state.uploaded_images.keys())
+
+if not image_names:
+    st.info("Please upload images or load a folder to begin.")
+    st.stop()
+
 # ---------------- sidebar ----------------
 with st.sidebar:
     st.header("Controls")
 
-    selected_image_name = st.selectbox("Choose an uploaded image", image_names)
+    selected_image_name = st.selectbox("Choose an image", image_names)
 
     selected_violation = st.selectbox("Choose a violation", violation_descriptions)
     selected_color = VIOLATION_COLORS.get(selected_violation, DEFAULT_BOX_COLOR)
@@ -249,7 +245,7 @@ with left:
         fill_color=CANVAS_FILL_COLOR,
         stroke_width=CANVAS_STROKE_WIDTH,
         stroke_color=selected_color,
-        background_image=image,
+        background_image=image.convert("RGBA"),
         update_streamlit=True,
         height=img_height,
         width=img_width,
