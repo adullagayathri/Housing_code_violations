@@ -271,25 +271,40 @@ with right:
     )
 
 # ---------------- detect newest drawn box ----------------
+# ---------------- sync annotations from canvas ----------------
 latest_box = None
 
 if canvas_result.json_data is not None:
     objects = canvas_result.json_data.get("objects", [])
 
-    if len(objects) > len(st.session_state.saved_annotations):
-        shape = objects[-1]
+    canvas_annotations = []
+    for shape in objects:
+        if shape.get("type") != "rect":
+            continue
 
-        if shape.get("type") == "rect":
-            x = int(shape["left"])
-            y = int(shape["top"])
-            w = int(shape["width"] * shape.get("scaleX", 1))
-            h = int(shape["height"] * shape.get("scaleY", 1))
+        x = int(shape["left"])
+        y = int(shape["top"])
+        w = int(shape["width"] * shape.get("scaleX", 1))
+        h = int(shape["height"] * shape.get("scaleY", 1))
 
-            latest_box = {
-                "violation": selected_violation,
-                "bbox": [x, y, w, h],
-                "color": selected_color,
-            }
+        canvas_annotations.append({
+            "violation": shape.get("violation", selected_violation),
+            "bbox": [x, y, w, h],
+            "color": shape.get("color", shape.get("stroke", selected_color)),
+        })
+
+    # If user deleted something on canvas, keep canvas as source of truth
+    if len(canvas_annotations) < len(st.session_state.saved_annotations):
+        st.session_state.saved_annotations = canvas_annotations
+        st.rerun()
+
+    # If user drew a new unsaved box, keep it separate until Add Violation is clicked
+    elif len(canvas_annotations) > len(st.session_state.saved_annotations):
+        latest_box = {
+            "violation": selected_violation,
+            "bbox": canvas_annotations[-1]["bbox"],
+            "color": selected_color,
+        }
 
 # ---------------- action buttons ----------------
 col1, col2, col3 = st.columns([1, 1, 1])
