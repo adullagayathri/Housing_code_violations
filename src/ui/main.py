@@ -2,12 +2,11 @@ import os
 import sys
 from pathlib import Path
 from io import BytesIO
+import json
 
-import pandas as pd
 import streamlit as st
 from PIL import Image
 from streamlit_drawable_canvas import st_canvas
-from io import BytesIO
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 sys.path.append(str(ROOT_DIR))
@@ -23,6 +22,10 @@ from src.ui.canvas_utils import (
     save_annotations,
     load_annotations_if_exists,
     build_initial_drawing,
+)
+from src.salesforce_backend import (
+    salesforce_is_configured,
+    save_submission_to_salesforce,
 )
 
 st.set_page_config(
@@ -106,8 +109,8 @@ st.markdown(
     """
     <div class="help-box">
     <b>How to use:</b><br>
-    1. Upload one or more house images<br>
-    2. Choose an uploaded image<br>
+    1. Upload one or more house images or load a folder<br>
+    2. Choose an image<br>
     3. Choose a violation<br>
     4. Draw one box around that issue<br>
     5. Click <b>Add Violation</b><br>
@@ -135,8 +138,7 @@ violation_descriptions = [
     "Abandoned / Unsafe",
 ]
 
-# ---------------- upload images ----------------
-# ---------------- image source options ----------------
+# ---------------- add images ----------------
 st.markdown("### Add Images")
 
 image_source = st.radio(
@@ -145,7 +147,12 @@ image_source = st.radio(
     horizontal=True,
 )
 
-# Option 1: Upload images
+if st.button("Clear Loaded Images"):
+    st.session_state.uploaded_images = {}
+    st.session_state.saved_annotations = []
+    st.session_state.last_image = None
+    st.rerun()
+
 if image_source == "Upload Images":
     uploaded_files = st.file_uploader(
         "Upload house images",
@@ -158,7 +165,6 @@ if image_source == "Upload Images":
             image_bytes = uploaded_file.read()
             st.session_state.uploaded_images[uploaded_file.name] = image_bytes
 
-# Option 2: Load images from local folder
 elif image_source == "Load From Folder":
     folder_path = st.text_input("Enter local folder path")
 
@@ -186,19 +192,11 @@ if not image_names:
     st.info("Please upload images or load a folder to begin.")
     st.stop()
 
-st.markdown("### Add Images")
-
-if st.button("Clear Loaded Images"):
-    st.session_state.uploaded_images = {}
-    st.session_state.saved_annotations = []
-    st.session_state.last_image = None
-    st.rerun()
-
 # ---------------- sidebar ----------------
 with st.sidebar:
     st.header("Controls")
 
-    selected_image_name = st.selectbox("Choose an uploaded image", image_names)
+    selected_image_name = st.selectbox("Choose an image", image_names)
 
     selected_violation = st.selectbox("Choose a violation", violation_descriptions)
     selected_color = VIOLATION_COLORS.get(selected_violation, DEFAULT_BOX_COLOR)
@@ -229,9 +227,9 @@ with st.sidebar:
 # ---------------- image handling ----------------
 image_bytes = st.session_state.uploaded_images[selected_image_name]
 image = Image.open(BytesIO(image_bytes)).convert("RGB")
+
 max_width = 900
 orig_width, orig_height = image.size
-
 if orig_width > max_width:
     new_width = max_width
     new_height = int(orig_height * (new_width / orig_width))
@@ -242,7 +240,7 @@ img_width, img_height = image.size
 if st.session_state.last_image != selected_image_name:
     st.session_state.saved_annotations = load_annotations_if_exists(
         selected_image_name,
-        DATA_JSON_DIR
+        DATA_JSON_DIR,
     )
     st.session_state.last_image = selected_image_name
 
@@ -251,15 +249,13 @@ initial_drawing = build_initial_drawing(st.session_state.saved_annotations)
 left, right = st.columns([4, 2], gap="large")
 
 with left:
-    st.markdown("### Image Preview")
-    st.image(image, use_container_width=True)
     st.markdown("### Mark Issues on the Image")
 
     canvas_result = st_canvas(
         fill_color=CANVAS_FILL_COLOR,
         stroke_width=CANVAS_STROKE_WIDTH,
         stroke_color=selected_color,
-        background_image=image,
+        background_image=image.convert("RGBA"),
         update_streamlit=True,
         height=img_height,
         width=img_width,
@@ -318,12 +314,35 @@ with col1:
 
 with col2:
     if st.button("💾 Save JSON", use_container_width=True):
-        json_path = save_annotations(
-            selected_image_name,
-            st.session_state.saved_annotations,
-            DATA_JSON_DIR
-        )
-        st.success(f"Saved to {json_path}")
+        output_json = {
+            "image_id": selected_image_name,
+            "annotations": st.session_state.saved_annotations,
+        }
+
+        json_text = json.dumps(output_json, indent=2)
+
+        image_bytes_to_save = st.session_state.uploaded_images.get(selected_image_name)
+
+        if image_bytes_to_save is None:
+            st.error("Could not find image bytes to save.")
+        elif salesforce_is_configured():
+            try:
+                record_id = save_submission_to_salesforce(
+                    image_name=selected_image_name,
+                    image_bytes=image_bytes_to_save,
+                    json_text=json_text,
+                )
+                st.success(f"Saved to Salesforce. Record ID: {record_id}")
+            except Exception as e:
+                st.error(f"Salesforce error: {str(e)}")
+        else:
+            json_path = save_annotations(
+                selected_image_name,
+                st.session_state.saved_annotations,
+                DATA_JSON_DIR,
+            )
+            st.warning("Salesforce keys are not configured yet. Saved locally instead.")
+            st.success(f"Saved to {json_path}")
 
 with col3:
     if st.button("🗑️ Clear All", use_container_width=True):
@@ -337,17 +356,15 @@ with col3:
 st.markdown("### Added Violations")
 
 if st.session_state.saved_annotations:
-    preview_df = pd.DataFrame(
-        [
-            {
-                "Violation": a["violation"],
-                "BBox": a["bbox"],
-                "Color": a["color"],
-            }
-            for a in st.session_state.saved_annotations
-        ]
-    )
-    st.dataframe(preview_df, use_container_width=True, hide_index=True)
+    preview_rows = [
+        {
+            "Violation": a["violation"],
+            "BBox": a["bbox"],
+            "Color": a["color"],
+        }
+        for a in st.session_state.saved_annotations
+    ]
+    st.dataframe(preview_rows, use_container_width=True, hide_index=True)
 else:
     st.info("No violations added yet.")
 
